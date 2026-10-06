@@ -12,120 +12,43 @@ jobs:
       - name: Create Android project
         shell: bash
         run: |
-          mkdir -p "$(dirname '.github/workflows/build-apk.yml')"
-          cat > '.github/workflows/build-apk.yml' <<'EOF_FILE'
-          name: Build APK
-          
-          on:
-            workflow_dispatch:
-            push:
-              branches: [ "main" ]
-          
-          jobs:
-            build:
-              runs-on: ubuntu-latest
-              steps:
-                - name: Checkout
-                  uses: actions/checkout@v4
-          
-                - name: Set up JDK 17
-                  uses: actions/setup-java@v4
-                  with:
-                    distribution: temurin
-                    java-version: '17'
-          
-                - name: Set up Gradle
-                  uses: gradle/actions/setup-gradle@v4
-                  with:
-                    gradle-version: '8.10.2'
-          
-                - name: Build debug APK
-                  run: gradle assembleDebug --no-daemon
-          
-                - name: Upload APK
-                  uses: actions/upload-artifact@v4
-                  with:
-                    name: RetroBaseball-debug
-                    path: app/build/outputs/apk/debug/app-debug.apk
-          EOF_FILE
-          mkdir -p "$(dirname 'README.md')"
-          cat > 'README.md' <<'EOF_FILE'
-          # 레트로 야구 Android 게임
-          
-          레트로 픽셀 야구 게임 프로토타입입니다.
-          
-          ## 현재 구현
-          - 가로 화면 고정
-          - 1~9회 경기 흐름
-          - 투수: 직구 / 커브 / 슬라이더
-          - 타자: 타이밍 스윙
-          - 볼 / 스트라이크 / 아웃
-          - 안타 / 홈런 / 헛스윙 / 파울 / 볼넷
-          - 픽셀풍 경기장과 선수
-          - Android 7.0(API 24) 이상
-          
-          ## APK 빌드
-          Android Studio에서 프로젝트를 열어 `app`을 실행하거나,
-          GitHub에 업로드 후 Actions의 `Build APK`를 실행하면
-          `app-debug.apk`가 artifact로 생성됩니다.
-          
-          현재 제작 환경에는 Android SDK/Build Tools가 설치되어 있지 않아
-          이 환경에서 APK 바이너리 자체까지 컴파일할 수는 없습니다.
-          EOF_FILE
           mkdir -p "$(dirname 'app/build.gradle')"
           cat > 'app/build.gradle' <<'EOF_FILE'
           plugins {
               id 'com.android.application'
           }
-          
           android {
               namespace 'com.example.retrobaseball'
               compileSdk 35
-          
               defaultConfig {
                   applicationId 'com.example.retrobaseball'
                   minSdk 24
                   targetSdk 35
-                  versionCode 1
-                  versionName '1.0'
+                  versionCode 3
+                  versionName '3.0'
               }
-          
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
-          
               buildTypes {
                   release {
                       minifyEnabled false
                       proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
                   }
               }
-          }
-          
-          java {
-              toolchain {
-                  languageVersion = JavaLanguageVersion.of(17)
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
               }
           }
           EOF_FILE
           mkdir -p "$(dirname 'app/proguard-rules.pro')"
           cat > 'app/proguard-rules.pro' <<'EOF_FILE'
-          # Keep default rules for this prototype.
+
           EOF_FILE
           mkdir -p "$(dirname 'app/src/main/AndroidManifest.xml')"
           cat > 'app/src/main/AndroidManifest.xml' <<'EOF_FILE'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application
-                  android:theme="@style/AppTheme"
-                  android:label="레트로 야구"
-                  android:allowBackup="false"
-                  android:supportsRtl="true">
-                  <activity
-                      android:name=".MainActivity"
-                      android:screenOrientation="portrait"
-                      android:exported="true">
+              <application android:theme="@style/AppTheme" android:label="16BIT BASEBALL" android:allowBackup="false">
+                  <activity android:name=".MainActivity" android:screenOrientation="portrait" android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
                           <category android:name="android.intent.category.LAUNCHER"/>
@@ -144,29 +67,278 @@ jobs:
           import java.util.Random;
           
           public class BaseballView extends View {
-              Paint p=new Paint(Paint.ANTI_ALIAS_FLAG), q=new Paint(); Random r=new Random();
-              String home,away,msg="PLAY BALL!"; int W,H,inning=1,outs=0,balls=0,strikes=0,homeScore=0,awayScore=0,bases=0,pitch=0; boolean top=true,menu=false,flying=false,over=false; float t=0;
-              int grass=Color.rgb(54,155,68),dirt=Color.rgb(166,91,43),white=Color.WHITE,black=Color.rgb(7,9,10),yellow=Color.rgb(255,220,65);
-              public BaseballView(Context c,String h,String a){super(c);home=h;away=a;postInvalidateDelayed(16);}
-              void rect(Canvas c,int col,float l,float t,float rr,float b){q.setColor(col);q.setStyle(Paint.Style.FILL);c.drawRect(l,t,rr,b,q);}
-              void stroke(Canvas c,int col,float l,float t,float rr,float b){q.setColor(col);q.setStyle(Paint.Style.STROKE);q.setStrokeWidth(3);c.drawRect(l,t,rr,b,q);q.setStyle(Paint.Style.FILL);}
-              void text(Canvas c,String s,float x,float y,float size,int col){p.setTypeface(Typeface.create(Typeface.MONOSPACE,Typeface.BOLD));p.setTextSize(size);p.setColor(col);c.drawText(s,x,y,p);}
-              @Override protected void onDraw(Canvas c){W=getWidth();H=getHeight();c.drawColor(black);bg(c);score(c);field(c);if(flying)ball(c);if(over)end(c);else controls(c);postInvalidateDelayed(16);}
-              void bg(Canvas c){rect(c,Color.rgb(28,62,94),0,0,W,H);for(int x=0;x<W;x+=18)rect(c,(x/18%2==0)?Color.rgb(48,84,170):Color.rgb(200,48,48),x,94,x+11,110);rect(c,grass,0,112,W,H);rect(c,Color.rgb(76,171,75),0,150,W,168);}
-              void score(Canvas c){rect(c,black,10,10,W-10,72);stroke(c,white,10,10,W-10,72);text(c,away+" "+awayScore,20,37,16,white);String s=home+" "+homeScore;text(c,s,W-20-p.measureText(s),37,16,white);text(c,inning+"회 "+(top?"초":"말"),W/2-28,37,16,yellow);text(c,"B"+balls+"  S"+strikes+"  O"+outs,W/2-48,59,14,white);}
-              void field(Canvas c){float cx=W/2f,my=H*.40f;p.setColor(dirt);c.drawCircle(cx,my+72,112,p);p.setColor(Color.rgb(65,150,67));c.drawCircle(cx,my+72,88,p);base(c,cx,my+164);base(c,cx-105,my+72);base(c,cx+105,my+72);base(c,cx,my-30);p.setColor(dirt);c.drawOval(cx-55,my-18,cx+55,my+20,p);player(c,cx,my-54,Color.rgb(48,88,190),false,1.5f);player(c,cx,H-230,Color.rgb(225,78,43),true,1.7f);}
-              void base(Canvas c,float x,float y){Path z=new Path();z.moveTo(x,y-8);z.lineTo(x+8,y);z.lineTo(x,y+8);z.lineTo(x-8,y);z.close();p.setColor(white);c.drawPath(z,p);}
-              void player(Canvas c,float x,float y,int shirt,boolean bat,float s){p.setColor(Color.argb(70,0,0,0));c.drawOval(x-38*s,y+48*s,x+38*s,y+66*s,p);rect(c,black,x-28*s,y+20*s,x-4*s,y+62*s);rect(c,black,x+4*s,y+20*s,x+28*s,y+62*s);rect(c,shirt,x-32*s,y-4*s,x+32*s,y+39*s);p.setColor(Color.rgb(246,194,145));c.drawCircle(x,y-25*s,27*s,p);rect(c,black,x-29*s,y-51*s,x+29*s,y-37*s);rect(c,black,x-10*s,y-26*s,x-4*s,y-19*s);rect(c,black,x+4*s,y-26*s,x+10*s,y-19*s);rect(c,shirt,x-47*s,y,x-27*s,y+27*s);rect(c,shirt,x+27*s,y,x+47*s,y+27*s);if(bat){rect(c,Color.rgb(196,140,65),x+30*s,y-5*s,x+92*s,y+4*s);rect(c,Color.rgb(120,75,35),x+21*s,y-9*s,x+38*s,y+8*s);}}
-              void ball(Canvas c){float e=t*t*(3-2*t),cx=W/2f,x=cx+(float)Math.sin(t*6.28)*((pitch==1)?48:(pitch==2?28:8)),y=H*.40f+(H-150-H*.40f)*e;p.setColor(white);c.drawCircle(x,y,9-2*t,p);}
-              void controls(Canvas c){float y=H-190;rect(c,black,14,H-98,W-14,H-20);stroke(c,white,14,H-98,W-14,H-20);text(c,msg,27,H-57,16,white);if(top){button(c,W/2-80,y,W/2+80,y+62,"SWING",yellow);text(c,"공이 홈플레이트에 오기 전에 타이밍을 맞추세요",W/2-150,y-12,12,white);}else if(menu){float bw=(W-42)/3f;button(c,14,y,14+bw,y+60,"FAST",white);button(c,21+bw,y,21+2*bw,y+60,"CURVE",white);button(c,28+2*bw,y,W-14,y+60,"SLIDER",white);}else{button(c,W/2-80,y,W/2+80,y+62,"PITCH",yellow);text(c,"구종 선택",W/2-35,y-12,13,white);}}
-              void button(Canvas c,float l,float t,float rr,float b,String s,int col){rect(c,Color.rgb(20,20,20),l,t,rr,b);stroke(c,col,l,t,rr,b);p.setTextSize(18);p.setTypeface(Typeface.DEFAULT_BOLD);text(c,s,(l+rr-p.measureText(s))/2,t+39,18,col);}
-              void end(Canvas c){rect(c,Color.argb(235,0,0,0),0,0,W,H);String w=homeScore==awayScore?"DRAW GAME":(homeScore>awayScore?home+" WIN!":away+" WIN!");text(c,"GAME OVER",W/2-70,H/2-85,27,yellow);text(c,w,W/2-p.measureText(w)/2,H/2-40,23,white);String sc=away+"  "+awayScore+" : "+homeScore+"  "+home;text(c,sc,W/2-p.measureText(sc)/2,H/2,17,white);button(c,W/2-95,H/2+55,W/2+95,H/2+120,"RESTART",yellow);}
-              void startPitch(){menu=true;msg="CHOOSE PITCH";}
-              void throwPitch(int type){pitch=type;menu=false;flying=true;t=0;msg="PITCHING...";}
-              void swing(){if(!flying){pitch=r.nextInt(3);flying=true;t=0;msg="WAIT... SWING!";return;}if(t<.30){strikes++;msg="TOO EARLY!";}else if(t<.55){strikes++;msg="LATE!";}else if(t<.84){int z=r.nextInt(100);if(z<12){awayScore++;msg="HOME RUN!";}else if(z<30){awayScore++;msg="DOUBLE!";}else if(z<55){awayScore++;msg="SINGLE!";}else{outs++;msg="OUT!";}}else{strikes++;msg="MISS!";}flying=false;after();}
-              void cpuHit(){int z=r.nextInt(100);if(z<12){homeScore++;msg="CPU HOME RUN!";}else if(z<38){homeScore++;msg="CPU HIT!";}else{outs++;msg="CPU OUT!";}after();}
-              void after(){if(strikes>=3||outs>=3){outs=0;balls=0;strikes=0;bases=0;if(top){top=false;msg=home+" ATTACK!";}else{if(inning>=9&&homeScore!=awayScore){over=true;return;}inning++;top=true;msg=away+" ATTACK!";if(inning>12)over=true;}}}
-              @Override public boolean onTouchEvent(MotionEvent e){if(e.getAction()!=MotionEvent.ACTION_UP)return true;float x=e.getX(),y=e.getY(),cy=H-190;if(over){if(x>W/2-110&&x<W/2+110&&y>H/2+35&&y<H/2+145)((MainActivity)getContext()).restartGame();return true;}if(top){if(x>W/2-105&&x<W/2+105&&y>cy-20&&y<cy+90)swing();}else if(menu){float bw=(W-42)/3f;if(y>cy-20&&y<cy+90){if(x<14+bw+5)throwPitch(0);else if(x<21+2*bw+5)throwPitch(1);else throwPitch(2);}}else if(x>W/2-105&&x<W/2+105&&y>cy-20&&y<cy+90)startPitch();return true;}
+              Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
+              Paint q=new Paint();
+              Random random=new Random();
+          
+              String myTeam, cpuTeam, msg="PLAY BALL!";
+              int inning=1, outs=0, balls=0, strikes=0, myScore=0, cpuScore=0;
+              boolean myBat=true, pitchMenu=false, flying=false, gameOver=false;
+              float flight=0;
+              int pitch=0;
+              int W,H;
+          
+              int grass=Color.rgb(47,145,58), lightGrass=Color.rgb(67,164,68);
+              int dirt=Color.rgb(166,88,39), navy=Color.rgb(12,29,55);
+              int cream=Color.rgb(245,238,204), yellow=Color.rgb(255,214,58);
+          
+              public BaseballView(Context c,String a,String b){
+                  super(c); myTeam=a; cpuTeam=b; setFocusable(true);
+              }
+          
+              protected void onDraw(Canvas c){
+                  W=getWidth(); H=getHeight();
+                  drawStadium(c);
+                  drawScore(c);
+                  drawDiamond(c);
+                  drawPlayers(c);
+                  if(flying) drawBall(c);
+                  if(gameOver) drawGameOver(c); else drawUI(c);
+                  postInvalidateDelayed(16);
+              }
+          
+              void drawStadium(Canvas c){
+                  c.drawColor(navy);
+          
+                  // scoreboard
+                  rect(c,Color.rgb(5,8,12),0,0,W,92);
+                  stroke(c,cream,7,7,W-7,85,3);
+                  txt(c,cpuTeam+"  "+cpuScore,18,34,16,cream);
+                  txt(c,myTeam+"  "+myScore,W-18-p.measureText(myTeam+"  "+myScore),34,16,cream);
+                  txt(c,inning+(myBat?"회 초":"회 말"),W/2-36,30,15,yellow);
+                  txt(c,"B "+balls+"   S "+strikes+"   O "+outs,W/2-68,59,14,cream);
+          
+                  // stadium lights
+                  for(int x=18;x<W;x+=70){
+                      rect(c,cream,x,103,x+38,109);
+                      for(int i=0;i<4;i++) rect(c,yellow,x+4+i*8,110,x+9+i*8,115);
+                  }
+          
+                  // crowd
+                  rect(c,Color.rgb(32,38,54),0,122,W,205);
+                  for(int y=128;y<200;y+=18){
+                      for(int x=4;x<W;x+=22){
+                          int col=((x+y)/22)%3==0?Color.rgb(216,54,50):(((x+y)/22)%3==1?Color.rgb(53,94,190):Color.rgb(238,187,54));
+                          rect(c,col,x,y,x+12,y+9);
+                      }
+                  }
+          
+                  // outfield wall
+                  rect(c,Color.rgb(25,91,48),0,205,W,245);
+                  txt(c,"HOME RUN",W/2-47,234,14,cream);
+          
+                  // field
+                  rect(c,grass,0,245,W,H);
+                  for(int y=260;y<H;y+=32) rect(c,lightGrass,0,y,W,y+15);
+          
+                  // foul lines/perspective
+                  q.setColor(cream); q.setStrokeWidth(5); q.setStyle(Paint.Style.STROKE);
+                  Path left=new Path(); left.moveTo(W/2-22,H-92); left.lineTo(25,260);
+                  Path right=new Path(); right.moveTo(W/2+22,H-92); right.lineTo(W-25,260);
+                  c.drawPath(left,q); c.drawPath(right,q); q.setStyle(Paint.Style.FILL);
+          
+                  // dirt infield polygon
+                  Path in=new Path();
+                  in.moveTo(W/2,H-130); in.lineTo(W/2-180,H*0.57f);
+                  in.lineTo(W/2,H*0.37f); in.lineTo(W/2+180,H*0.57f); in.close();
+                  q.setColor(dirt); c.drawPath(in,q);
+          
+                  // base paths
+                  q.setColor(Color.argb(45,255,255,255)); q.setStrokeWidth(24);
+                  c.drawLine(W/2,H-130,W/2-105,H*0.57f,q);
+                  c.drawLine(W/2-105,H*0.57f,W/2,H*0.37f,q);
+                  c.drawLine(W/2,H*0.37f,W/2+105,H*0.57f,q);
+                  c.drawLine(W/2+105,H*0.57f,W/2,H-130,q);
+          
+                  // grass details
+                  for(int x=20;x<W;x+=34) rect(c,Color.argb(35,255,255,255),x,270,x+3,H-110);
+              }
+          
+              void drawScore(Canvas c){
+                  rect(c,Color.BLACK,12,102,W-12,120);
+                  txt(c,"★ 16-BIT LEAGUE ★",W/2-70,116,12,yellow);
+              }
+          
+              void drawDiamond(Canvas c){
+                  float cx=W/2f, homeY=H-125, firstX=cx+105, secondY=H*0.37f, thirdX=cx-105;
+                  base(c,cx,homeY); base(c,firstX,H*0.57f); base(c,cx,secondY); base(c,thirdX,H*0.57f);
+                  // mound
+                  q.setColor(dirt); c.drawOval(cx-55,H*0.40f-22,cx+55,H*0.40f+22,q);
+                  rect(c,cream,cx-18,H*0.40f-4,cx+18,H*0.40f+4);
+              }
+          
+              void drawPlayers(Canvas c){
+                  drawPlayer(c,W/2f,H*0.40f-38,Color.rgb(48,91,188),false,1.45f);
+                  drawPlayer(c,W/2f,H-245,Color.rgb(218,70,43),true,1.75f);
+                  // catcher
+                  drawPlayer(c,W/2f,H-188,Color.rgb(38,70,150),false,1.05f);
+              }
+          
+              void drawPlayer(Canvas c,float x,float y,int shirt,boolean batter,float s){
+                  // shadow
+                  q.setColor(Color.argb(75,0,0,0)); c.drawOval(x-34*s,y+54*s,x+34*s,y+68*s,q);
+                  // legs
+                  rect(c,Color.BLACK,x-26*s,y+25*s,x-5*s,y+65*s);
+                  rect(c,Color.BLACK,x+5*s,y+25*s,x+26*s,y+65*s);
+                  // torso
+                  rect(c,shirt,x-32*s,y-5*s,x+32*s,y+40*s);
+                  // arms
+                  rect(c,shirt,x-47*s,y+2*s,x-28*s,y+29*s);
+                  rect(c,shirt,x+28*s,y+2*s,x+47*s,y+29*s);
+                  // neck
+                  rect(c,Color.rgb(244,188,140),x-11*s,y+34*s,x+11*s,y+47*s);
+                  // head
+                  q.setColor(Color.rgb(247,194,143)); c.drawCircle(x,y-25*s,27*s,q);
+                  // cap/hair
+                  rect(c,Color.BLACK,x-30*s,y-51*s,x+30*s,y-38*s);
+                  rect(c,Color.BLACK,x-37*s,y-45*s,x+4*s,y-37*s);
+                  // eyes
+                  rect(c,Color.BLACK,x-11*s,y-28*s,x-5*s,y-21*s);
+                  rect(c,Color.BLACK,x+5*s,y-28*s,x+11*s,y-21*s);
+                  // shoes
+                  rect(c,Color.BLACK,x-35*s,y+57*s,x-3*s,y+70*s);
+                  rect(c,Color.BLACK,x+3*s,y+57*s,x+35*s,y+70*s);
+                  if(batter){
+                      rect(c,Color.rgb(194,137,62),x+28*s,y-6*s,x+104*s,y+4*s);
+                      rect(c,Color.rgb(121,73,31),x+20*s,y-11*s,x+39*s,y+8*s);
+                  }
+              }
+          
+              void drawBall(Canvas c){
+                  float t=Math.min(1,flight);
+                  float ease=t*t*(3-2*t);
+                  float startY=H*0.40f-15, endY=H-285;
+                  float curve=(pitch==1?62:pitch==2?-48:0);
+                  float x=W/2f+curve*(float)Math.sin(t*Math.PI);
+                  float y=startY+(endY-startY)*ease;
+                  q.setColor(Color.WHITE); c.drawCircle(x,y,9,q);
+                  q.setColor(Color.argb(90,255,255,255)); c.drawCircle(x-5,y-5,16,q);
+              }
+          
+              void drawUI(Canvas c){
+                  // Raise controls significantly: around 2/3 down, leaving field visible below.
+                  float y=H-335;
+                  rect(c,Color.argb(215,5,9,13),12,y-42,W-12,y+82);
+                  stroke(c,cream,12,y-42,W-12,y+82,3);
+          
+                  txt(c,msg,W/2-p.measureText(msg)/2,y-17,15,cream);
+          
+                  if(myBat){
+                      button(c,W/2-90,y,W/2+90,y+62,"SWING",yellow);
+                      txt(c,"TAP WHEN THE BALL REACHES THE BAT",W/2-123,y+87,10,cream);
+                  } else if(pitchMenu){
+                      float gap=8, bw=(W-28-gap*2)/3f;
+                      button(c,14,y,14+bw,y+58,"FAST",cream);
+                      button(c,14+bw+gap,y,14+bw*2+gap,y+58,"CURVE",cream);
+                      button(c,14+bw*2+gap*2,y,W-14,y+58,"SLIDER",cream);
+                  } else {
+                      button(c,W/2-90,y,W/2+90,y+62,"PITCH",yellow);
+                      txt(c,"CHOOSE YOUR PITCH",W/2-72,y+87,10,cream);
+                  }
+          
+                  // score/diamond info
+                  txt(c,"● "+(myBat?myTeam:cpuTeam),18,H-104,12,yellow);
+                  txt(c,"READY",W-62,H-104,11,cream);
+              }
+          
+              void drawGameOver(Canvas c){
+                  rect(c,Color.argb(235,0,0,0),0,0,W,H);
+                  txt(c,"GAME OVER",W/2-65,H/2-90,27,yellow);
+                  String win=myScore==cpuScore?"DRAW GAME":(myScore>cpuScore?myTeam+" WIN!":cpuTeam+" WIN!");
+                  txt(c,win,W/2-p.measureText(win)/2,H/2-42,22,cream);
+                  txt(c,cpuTeam+" "+cpuScore+"  -  "+myScore+" "+myTeam,W/2-105,H/2,16,cream);
+                  button(c,W/2-90,H/2+55,W/2+90,H/2+120,"RESTART",yellow);
+              }
+          
+              void pitchMenu(){ if(!myBat && !flying){ pitchMenu=true; msg="SELECT PITCH"; } }
+          
+              void throwPitch(int type){
+                  if(myBat||flying||gameOver)return;
+                  pitch=type; pitchMenu=false; flying=true; flight=0; msg="PITCH...";
+              }
+          
+              void swing(){
+                  if(!myBat||gameOver)return;
+                  if(!flying){ msg="WAIT FOR PITCH"; return; }
+                  if(flight>0.50f && flight<0.84f){
+                      int r=random.nextInt(100);
+                      if(r<14){myScore+=4;msg="HOME RUN!!!";}
+                      else if(r<38){myScore+=2;msg="DOUBLE!";}
+                      else if(r<72){myScore+=1;msg="BASE HIT!";}
+                      else {outs++;msg="OUT!";}
+                  }else{
+                      strikes++; msg=flight<0.50f?"TOO EARLY!":"TOO LATE!";
+                  }
+                  flying=false; nextPlay();
+              }
+          
+              void cpuPlay(){
+                  if(myBat||flying||gameOver)return;
+                  int r=random.nextInt(100);
+                  if(r<15){cpuScore+=4;msg="CPU HOME RUN!";}
+                  else if(r<42){cpuScore++;msg="CPU HIT!";}
+                  else {outs++;msg="CPU OUT!";}
+                  nextPlay();
+              }
+          
+              void nextPlay(){
+                  if(strikes>=3){outs++;strikes=0;balls=0;msg="STRIKEOUT!";}
+                  if(outs>=3){
+                      outs=0;balls=0;strikes=0;
+                      if(myBat){
+                          myBat=false;msg=cpuTeam+" AT BAT";
+                      }else{
+                          myBat=true;inning++;msg=myTeam+" AT BAT";
+                          if(inning>9 && myScore!=cpuScore) gameOver=true;
+                          if(inning>12) gameOver=true;
+                      }
+                  }
+              }
+          
+              void base(Canvas c,float x,float y){
+                  Path b=new Path();b.moveTo(x,y-9);b.lineTo(x+9,y);b.lineTo(x,y+9);b.lineTo(x-9,y);b.close();
+                  q.setColor(cream);c.drawPath(b,q);
+              }
+              void rect(Canvas c,int color,float l,float t,float r,float b){q.setColor(color);c.drawRect(l,t,r,b,q);}
+              void stroke(Canvas c,int color,float l,float t,float r,float b,float s){
+                  q.setStyle(Paint.Style.STROKE);q.setStrokeWidth(s);q.setColor(color);c.drawRect(l,t,r,b,q);q.setStyle(Paint.Style.FILL);
+              }
+              void txt(Canvas c,String s,float x,float y,float size,int color){
+                  p.setTypeface(Typeface.create(Typeface.MONOSPACE,Typeface.BOLD));p.setTextSize(size);p.setColor(color);c.drawText(s,x,y,p);
+              }
+              void button(Canvas c,float l,float t,float r,float b,String s,int col){
+                  rect(c,Color.rgb(20,24,28),l,t,r,b);stroke(c,col,l,t,r,b,4);
+                  p.setTypeface(Typeface.create(Typeface.MONOSPACE,Typeface.BOLD));p.setTextSize(18);
+                  txt(c,s,(l+r-p.measureText(s))/2,t+39,18,col);
+              }
+          
+              public boolean onTouchEvent(MotionEvent e){
+                  if(e.getAction()!=MotionEvent.ACTION_UP)return true;
+                  float x=e.getX(),y=e.getY();
+          
+                  if(gameOver){
+                      if(x>W/2-110&&x<W/2+110&&y>H/2+35&&y<H/2+150)
+                          ((MainActivity)getContext()).restart();
+                      return true;
+                  }
+          
+                  float by=H-335;
+                  if(myBat){
+                      if(x>W/2-110&&x<W/2+110&&y>by-20&&y<by+90)swing();
+                  }else if(pitchMenu){
+                      if(y>by-20&&y<by+90){
+                          float bw=(W-44)/3f;
+                          if(x<14+bw)throwPitch(0);
+                          else if(x<14+bw*2)throwPitch(1);
+                          else throwPitch(2);
+                      }
+                  }else{
+                      if(x>W/2-110&&x<W/2+110&&y>by-20&&y<by+90)pitchMenu();
+                  }
+                  return true;
+              }
+          
+              protected void onSizeChanged(int w,int h,int ow,int oh){W=w;H=h;}
           }
           EOF_FILE
           mkdir -p "$(dirname 'app/src/main/java/com/example/retrobaseball/MainActivity.java')"
@@ -180,25 +352,55 @@ jobs:
           import android.widget.*;
           
           public class MainActivity extends Activity {
-              BaseballView game;
-              @Override public void onCreate(Bundle b){
+              @Override public void onCreate(Bundle b) {
                   super.onCreate(b);
                   requestWindowFeature(Window.FEATURE_NO_TITLE);
-                  getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,WindowManager.LayoutParams.FLAG_FULLSCREEN);
-                  showTeams();
+                  getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                          WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                  teamDialog();
               }
-              void showTeams(){
-                  LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(40,8,40,4); box.setBackgroundColor(Color.rgb(18,18,18));
-                  TextView title=new TextView(this); title.setText("16BIT BASEBALL\n팀 이름을 입력하세요"); title.setTextColor(Color.WHITE); title.setTextSize(20); title.setGravity(17); box.addView(title);
-                  EditText a=new EditText(this); a.setHint("내 팀"); a.setText("RED SOX"); a.setTextColor(Color.WHITE); a.setHintTextColor(Color.GRAY); box.addView(a);
-                  EditText b=new EditText(this); b.setHint("상대 팀"); b.setText("BLUE STARS"); b.setTextColor(Color.WHITE); b.setHintTextColor(Color.GRAY); box.addView(b);
-                  new AlertDialog.Builder(this).setView(box).setPositiveButton("경기 시작",(d,w)->{
-                      String home=a.getText().toString().trim(), away=b.getText().toString().trim();
-                      if(home.isEmpty())home="RED SOX"; if(away.isEmpty())away="BLUE STARS";
-                      game=new BaseballView(this,home,away); setContentView(game);
-                  }).setCancelable(false).show();
+          
+              void teamDialog() {
+                  LinearLayout box = new LinearLayout(this);
+                  box.setOrientation(LinearLayout.VERTICAL);
+                  box.setPadding(36, 12, 36, 4);
+                  box.setBackgroundColor(Color.rgb(18,18,18));
+          
+                  TextView title = new TextView(this);
+                  title.setText("16BIT BASEBALL\nTEAM SETUP");
+                  title.setTextColor(Color.WHITE);
+                  title.setTextSize(21);
+                  title.setGravity(Gravity.CENTER);
+                  box.addView(title);
+          
+                  EditText player = new EditText(this);
+                  player.setHint("내 팀 이름");
+                  player.setText("RED SOX");
+                  player.setTextColor(Color.WHITE);
+                  player.setHintTextColor(Color.GRAY);
+                  box.addView(player);
+          
+                  EditText opponent = new EditText(this);
+                  opponent.setHint("상대 팀 이름");
+                  opponent.setText("BLUE STARS");
+                  opponent.setTextColor(Color.WHITE);
+                  opponent.setHintTextColor(Color.GRAY);
+                  box.addView(opponent);
+          
+                  new AlertDialog.Builder(this)
+                      .setView(box)
+                      .setPositiveButton("PLAY BALL", (d,w) -> {
+                          String a = player.getText().toString().trim();
+                          String c = opponent.getText().toString().trim();
+                          if(a.length()==0) a="HOME";
+                          if(c.length()==0) c="AWAY";
+                          setContentView(new BaseballView(this,a,c));
+                      })
+                      .setCancelable(false)
+                      .show();
               }
-              public void restartGame(){showTeams();}
+          
+              public void restart() { teamDialog(); }
           }
           EOF_FILE
           mkdir -p "$(dirname 'app/src/main/res/values/styles.xml')"
@@ -208,10 +410,8 @@ jobs:
               <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
                   <item name="android:fontFamily">monospace</item>
                   <item name="android:windowFullscreen">true</item>
-                  <item name="android:colorAccent">#FFFFFF</item>
                   <item name="android:navigationBarColor">#000000</item>
-                  <item name="android:statusBarColor">#000000</item>
-                  <item name="android:windowLightStatusBar">false</item>
+                  <item name="android:windowLightNavigationBar">false</item>
               </style>
           </resources>
           EOF_FILE
@@ -229,18 +429,11 @@ jobs:
           mkdir -p "$(dirname 'settings.gradle')"
           cat > 'settings.gradle' <<'EOF_FILE'
           pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
+              repositories { google(); mavenCentral(); gradlePluginPortal() }
           }
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
+              repositories { google(); mavenCentral() }
           }
           rootProject.name = "RetroBaseballGame"
           include(":app")
@@ -262,5 +455,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: RetroBaseball-v2-debug
+          name: RetroBaseball-v3-debug
           path: app/build/outputs/apk/debug/app-debug.apk
