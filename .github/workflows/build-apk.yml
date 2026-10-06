@@ -23,8 +23,8 @@ jobs:
                   applicationId 'com.example.retrobaseball'
                   minSdk 24
                   targetSdk 35
-                  versionCode 8
-                  versionName '8.0'
+                  versionCode 9
+                  versionName '9.0'
               }
               buildTypes {
                   release {
@@ -66,6 +66,7 @@ jobs:
           
           import android.content.Context;
           import android.graphics.*;
+          import com.example.retrobaseball.R;
           import android.os.*;
           import android.view.*;
           import java.util.Random;
@@ -73,6 +74,10 @@ jobs:
           public class BaseballView extends View {
               final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG), q=new Paint();
               final Random rnd=new Random();
+          
+              Bitmap batterBack0,batterBack1,batterBack2,batterBack3,batterFront;
+              Bitmap pitcherFront0,pitcherFront1,pitcherFront2,pitcherFront3;
+              Bitmap pitcherBack0,pitcherBack1,pitcherBack2,pitcherBack3;
               final String me, opp;
               final Vibrator vib;
           
@@ -92,6 +97,19 @@ jobs:
           
               BaseballView(Context c,String m,String o){
                   super(c); me=m; opp=o;
+                  batterBack0=load(R.drawable.batter_back_0);
+                  batterBack1=load(R.drawable.batter_back_1);
+                  batterBack2=load(R.drawable.batter_back_2);
+                  batterBack3=load(R.drawable.batter_back_3);
+                  batterFront=load(R.drawable.batter_front_0);
+                  pitcherFront0=load(R.drawable.pitcher_front_0);
+                  pitcherFront1=load(R.drawable.pitcher_front_1);
+                  pitcherFront2=load(R.drawable.pitcher_front_2);
+                  pitcherFront3=load(R.drawable.pitcher_front_3);
+                  pitcherBack0=load(R.drawable.pitcher_back_0);
+                  pitcherBack1=load(R.drawable.pitcher_back_1);
+                  pitcherBack2=load(R.drawable.pitcher_back_2);
+                  pitcherBack3=load(R.drawable.pitcher_back_3);
                   if(Build.VERSION.SDK_INT>=31){
                       VibratorManager vm=(VibratorManager)c.getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
                       vib=vm.getDefaultVibrator();
@@ -111,7 +129,6 @@ jobs:
                   drawPlayers(c);
                   if(phase==1) drawWindup(c);
                   if(phase==2) drawBall(c);
-                  if(swing>0) drawBatSwing(c);
                   if(flash>0) drawImpact(c);
                   drawHUD(c);
                   if(gameOver) drawGameOver(c);
@@ -210,62 +227,47 @@ jobs:
           
               void drawPlayers(Canvas c){
                   if(batting){
-                      // Batter: back to camera. Pitcher: front to camera.
-                      player(c,450,485,AWAY,1.42f,false,0,false);
-                      player(c,450,900,HOME,1.62f,true,swing,true);
+                      // Detailed pitcher front at 12 o'clock, batter back at bottom.
+                      drawSprite(c, pitcherFront(), 450, 475, 1.45f);
+                      drawSprite(c, batterBack(), 450, 900, 1.72f);
                   }else{
-                      // Batter is now at 12 o'clock and faces the player.
-                      player(c,450,425,HOME,1.48f,true,0,false);
-                      // User's pitcher at bottom; back view because camera is behind pitcher.
-                      player(c,450,900,AWAY,1.58f,false,t,true);
+                      // Camera is reversed: detailed batter front at 12 o'clock,
+                      // player-controlled pitcher is shown from behind at the bottom.
+                      drawSprite(c, batterFront, 450, 420, 1.55f);
+                      drawSprite(c, pitcherBack(), 450, 900, 1.72f);
                   }
               }
           
-              void player(Canvas c,float x,float y,int jersey,float s,boolean bat,float motion,boolean back){
-                  float bob=(float)Math.sin(motion*Math.PI*2)*3;
-                  q.setColor(Color.argb(75,0,0,0));c.drawOval(x-43*s,y+78*s,x+43*s,y+91*s,q);
+              Bitmap load(int id){ return BitmapFactory.decodeResource(getResources(), id); }
           
-                  // Pants / belt / jersey.
-                  rect(c,Color.rgb(235,235,226),x-31*s,y+30*s+ bob,x-5*s,y+76*s+bob);
-                  rect(c,Color.rgb(235,235,226),x+5*s,y+30*s- bob,x+31*s,y+76*s-bob);
-                  rect(c,Color.rgb(35,35,38),x-37*s,y+27*s,x+37*s,y+36*s);
-                  rect(c,jersey,x-39*s,y-8*s,x+39*s,y+47*s);
-                  rect(c,Color.rgb(242,242,231),x-9*s,y-7*s,x+9*s,y+45*s);
-                  rect(c,jersey,x-56*s,y-1*s,x-34*s,y+31*s);
-                  rect(c,jersey,x+34*s,y-1*s,x+56*s,y+31*s);
+              Bitmap batterBack(){
+                  if(swing<=0) return batterBack0;
+                  if(swing<.33f) return batterBack1;
+                  if(swing<.68f) return batterBack2;
+                  return batterBack3;
+              }
           
-                  q.setColor(Color.rgb(246,190,137));
-                  c.drawCircle(x-48*s,y+33*s,9*s,q); c.drawCircle(x+48*s,y+33*s,9*s,q);
-                  c.drawCircle(x,y-39*s,34*s,q);
+              Bitmap pitcherFront(){
+                  if(phase!=1) return pitcherFront0;
+                  if(t<.30f) return pitcherFront1;
+                  if(t<.68f) return pitcherFront2;
+                  return pitcherFront3;
+              }
           
-                  // Cap.
-                  rect(c,jersey,x-39*s,y-72*s,x+39*s,y-54*s);
-                  rect(c,jersey,x-47*s,y-64*s,x+8*s,y-54*s);
+              Bitmap pitcherBack(){
+                  if(phase!=1) return pitcherBack0;
+                  if(t<.30f) return pitcherBack1;
+                  if(t<.68f) return pitcherBack2;
+                  return pitcherBack3;
+              }
           
-                  if(back){
-                      text(c,"27",x-18*s,y+30*s,27*s,WHITE);
-                      text(c,"SOX",x-18*s,y+47*s,9*s,WHITE);
-                  }else{
-                      rect(c,Color.BLACK,x-12*s,y-41*s,x-5*s,y-33*s);
-                      rect(c,Color.BLACK,x+5*s,y-41*s,x+12*s,y-33*s);
-                      rect(c,Color.rgb(190,65,48),x-7*s,y-22*s,x+7*s,y-18*s);
-                      text(c,"27",x-14*s,y+31*s,22*s,WHITE);
-                  }
-          
-                  rect(c,jersey,x-34*s,y+72*s,x-4*s,y+87*s);
-                  rect(c,jersey,x+4*s,y+72*s,x+34*s,y+87*s);
-                  rect(c,Color.BLACK,x-39*s,y+84*s,x-3*s,y+96*s);
-                  rect(c,Color.BLACK,x+3*s,y+84*s,x+39*s,y+96*s);
-          
-                  if(bat){
-                      float a=motion>0?-72+motion*144:-48;
-                      q.setColor(Color.rgb(190,132,56));q.setStrokeWidth(12*s);
-                      q.setStyle(Paint.Style.STROKE);
-                      float ex=x+(float)Math.cos(Math.toRadians(a))*125*s;
-                      float ey=y+10*s+(float)Math.sin(Math.toRadians(a))*125*s;
-                      c.drawLine(x+25*s,y+10*s,ex,ey,q);
-                      q.setStyle(Paint.Style.FILL);
-                  }
+              void drawSprite(Canvas c, Bitmap b, float cx, float cy, float scale){
+                  if(b==null)return;
+                  float w=b.getWidth()*scale, h=b.getHeight()*scale;
+                  RectF dst=new RectF(cx-w/2f,cy-h/2f,cx+w/2f,cy+h/2f);
+                  Paint sp=new Paint(Paint.FILTER_BITMAP_FLAG);
+                  sp.setFilterBitmap(false); // preserve hard 16-bit pixels
+                  c.drawBitmap(b,null,dst,sp);
               }
           
               void drawWindup(Canvas c){
@@ -309,12 +311,6 @@ jobs:
                   q.setColor(Color.argb(190,255,218,60));q.setStyle(Paint.Style.STROKE);q.setStrokeWidth(4);
                   c.drawCircle(ex,ey,36,q);q.setStyle(Paint.Style.FILL);
                   text(c,"BALL",x-18,y-27,11,WHITE);
-              }
-          
-              void drawBatSwing(Canvas c){
-                  float a=-72+swing*144;
-                  q.setColor(Color.rgb(190,132,56));q.setStrokeWidth(15);q.setStyle(Paint.Style.STROKE);
-                  c.drawArc(300,815,600,1010,a,75,false,q);q.setStyle(Paint.Style.FILL);
               }
           
               void drawImpact(Canvas c){
@@ -583,5 +579,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: RetroBaseball-v8-debug
+          name: RetroBaseball-v9-debug
           path: app/build/outputs/apk/debug/app-debug.apk
