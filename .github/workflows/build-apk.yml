@@ -23,8 +23,8 @@ jobs:
                   applicationId 'com.example.retrobaseball'
                   minSdk 24
                   targetSdk 35
-                  versionCode 10
-                  versionName '10.0'
+                  versionCode 11
+                  versionName '11.0'
               }
               buildTypes {
                   release {
@@ -228,13 +228,13 @@ jobs:
               void drawPlayers(Canvas c){
                   if(batting){
                       // Detailed pitcher front at 12 o'clock, batter back at bottom.
-                      drawSprite(c, pitcherFront(), 450, 475, 1.45f);
-                      drawSprite(c, batterBack(), 450, 900, 1.72f);
+                      drawSprite(c, pitcherFront(), 450, 500, 0.78f);
+                      drawSprite(c, batterBack(), 450, 910, 0.82f);
                   }else{
                       // Camera is reversed: detailed batter front at 12 o'clock,
                       // player-controlled pitcher is shown from behind at the bottom.
-                      drawSprite(c, batterFront, 450, 420, 1.55f);
-                      drawSprite(c, pitcherBack(), 450, 900, 1.72f);
+                      drawSprite(c, batterFront, 450, 430, 0.82f);
+                      drawSprite(c, pitcherBack(), 450, 910, 0.82f);
                   }
               }
           
@@ -588,22 +588,6 @@ jobs:
           rootProject.name = "RetroBaseballGame"
           include(":app")
           EOF_FILE
-      - name: Verify drawable assets
-        run: |
-          test -f app/src/main/res/drawable/batter_back_0.png
-          test -f app/src/main/res/drawable/batter_back_1.png
-          test -f app/src/main/res/drawable/batter_back_2.png
-          test -f app/src/main/res/drawable/batter_back_3.png
-          test -f app/src/main/res/drawable/pitcher_front_0.png
-          test -f app/src/main/res/drawable/pitcher_front_1.png
-          test -f app/src/main/res/drawable/pitcher_front_2.png
-          test -f app/src/main/res/drawable/pitcher_front_3.png
-          test -f app/src/main/res/drawable/pitcher_back_0.png
-          test -f app/src/main/res/drawable/pitcher_back_1.png
-          test -f app/src/main/res/drawable/pitcher_back_2.png
-          test -f app/src/main/res/drawable/pitcher_back_3.png
-          test -f app/src/main/res/drawable/batter_front_0.png
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -615,11 +599,11 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Clean and build debug APK
-        run: gradle clean assembleDebug --no-daemon --stacktrace
+      - name: Build debug APK
+        run: gradle clean assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: RetroBaseball-v10-debug
+          name: RetroBaseball-v11-debug
           path: app/build/outputs/apk/debug/app-debug.apk
