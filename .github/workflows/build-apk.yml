@@ -27,7 +27,8 @@ jobs:
           EOF_FILE
           mkdir -p "$(dirname 'app/src/main/AndroidManifest.xml')"
           cat > 'app/src/main/AndroidManifest.xml' <<'EOF_FILE'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:theme="@style/AppTheme" android:label="16BIT BASEBALL" android:allowBackup="false"><activity android:name=".MainActivity" android:screenOrientation="portrait" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.VIBRATE"/><application android:theme="@style/AppTheme" android:label="16BIT BASEBALL" android:allowBackup="false"><activity android:name=".MainActivity" android:screenOrientation="portrait" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
           EOF_FILE
           mkdir -p "$(dirname 'app/src/main/java/com/example/retrobaseball/BaseballView.java')"
           cat > 'app/src/main/java/com/example/retrobaseball/BaseballView.java' <<'EOF_FILE'
@@ -35,104 +36,95 @@ jobs:
           
           import android.content.Context;
           import android.graphics.*;
+          import android.os.Build;
+          import android.os.VibrationEffect;
+          import android.os.Vibrator;
+          import android.os.VibratorManager;
           import android.view.MotionEvent;
           import android.view.View;
           import java.util.Random;
           
           public class BaseballView extends View {
-              private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-              private final Paint q = new Paint();
-              private final Random rng = new Random();
-              private final String me, op;
-              private int W,H,VW,VH,OX,OY;
-              private float S;
-              private int inning=1, outs=0, strikes=0, meScore=0, opScore=0;
-              private boolean batting=true, gameOver=false;
+              private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG), q=new Paint();
+              private final Random rng=new Random();
+              private final String me,op;
+              private final Vibrator vibrator;
+              private int W,H,VW,VH,OX,OY; private float S;
+              private int inning=1,outs=0,strikes=0,meScore=0,opScore=0;
+              private boolean batting=true,gameOver=false;
               private int phase=0; // 0 ready, 1 windup, 2 flight, 3 result, 4 pitch setup
-              private int pitchType=0, direction=4;
-              private float t=0, swingT=0, resultT=0;
-              private String msg="READY", result="";
-              private final int G=Color.rgb(35,150,46), G2=Color.rgb(48,169,57), D=Color.rgb(155,105,25), N=Color.rgb(7,14,30), Y=Color.rgb(255,216,50);
+              private int pitchType=0,direction=4;
+              private float t=0,swingT=0,resultT=0,hitFlash=0;
+              private String msg="READY",result="";
+              private final int G=Color.rgb(38,148,52),G2=Color.rgb(54,169,62),D=Color.rgb(155,104,26),N=Color.rgb(7,14,30),Y=Color.rgb(255,216,50),RED=Color.rgb(205,55,42),BLUE=Color.rgb(38,78,175);
           
-              public BaseballView(Context c,String a,String b){super(c);me=a;op=b;setFocusable(true);}
+              public BaseballView(Context c,String a,String b){super(c);me=a;op=b;
+                  if(Build.VERSION.SDK_INT>=31){VibratorManager vm=(VibratorManager)c.getSystemService(Context.VIBRATOR_MANAGER_SERVICE);vibrator=vm.getDefaultVibrator();}
+                  else vibrator=(Vibrator)c.getSystemService(Context.VIBRATOR_SERVICE); setFocusable(true);}
           
               @Override protected void onDraw(Canvas c){
-                  W=getWidth(); H=getHeight();
-                  VW=Math.min(W,(int)(H*.75f)); VH=(int)(VW/.75f); if(VH>H){VH=H;VW=(int)(H*.75f);} OX=(W-VW)/2; OY=(H-VH)/2; S=VW/720f;
-                  c.drawColor(Color.BLACK); c.save(); c.translate(OX,OY); c.scale(S,S);
-                  world(c); players(c); if(phase==1)windup(c); if(phase==2)ball(c); if(swingT>0)batSwing(c); hud(c); if(gameOver)over(c); c.restore();
-                  tick(); postInvalidateDelayed(16);
+                  W=getWidth();H=getHeight();VW=Math.min(W,(int)(H*.75f));VH=(int)(VW/.75f);if(VH>H){VH=H;VW=(int)(H*.75f);}OX=(W-VW)/2;OY=(H-VH)/2;S=VW/720f;
+                  c.drawColor(Color.BLACK);c.save();c.translate(OX,OY);c.scale(S,S);world(c);players(c);if(phase==1)windup(c);if(phase==2)ball(c);if(swingT>0)swing(c);if(hitFlash>0)flash(c);hud(c);if(gameOver)over(c);c.restore();tick();postInvalidateDelayed(16);
               }
-          
               private void tick(){
-                  if(phase==1){t+=.035f; if(t>=1){t=0;phase=2;msg="WATCH THE BALL!";}}
-                  else if(phase==2){t+=.018f; if(t>=1){t=1;if(batting){phase=3;resultT=.7f;msg="SWING NOW!";}else cpuResult();}}
-                  if(swingT>0){swingT+=.10f;if(swingT>=1)swingT=0;}
-                  if(resultT>0){resultT-=.035f;if(resultT<=0){resultT=0;advance();}}
+                  if(phase==1){t+=.035f;if(t>=1){t=0;phase=2;msg=batting?"WATCH THE BALL!":"THROW!";}}
+                  else if(phase==2){t+=.014f;if(t>=1){t=1;if(batting){phase=3;resultT=.65f;msg="SWING NOW!";}else cpuResult();}}
+                  if(swingT>0){swingT+=.10f;if(swingT>=1)swingT=0;} if(resultT>0){resultT-=.035f;if(resultT<=0){resultT=0;advance();}} if(hitFlash>0)hitFlash-=.10f;
               }
-          
               private void world(Canvas c){
-                  rect(c,G,0,0,720,960); rect(c,N,0,0,720,66); stroke(c,Color.WHITE,6,6,714,60,2);
-                  text(c,op+" "+opScore,16,29,14,Color.WHITE); text(c,me+" "+meScore,704-p.measureText(me+" "+meScore),29,14,Color.WHITE);
-                  text(c,inning+"회 "+(batting?"초":"말"),329,28,14,Y); text(c,"B 0   S "+strikes+"   O "+outs,304,50,12,Color.WHITE);
-                  rect(c,Color.rgb(27,65,48),0,76,720,190);
-                  for(int y=84;y<180;y+=18)for(int x=0;x<720;x+=18){int n=(x/18+y/18)%4;int col=n==0?Color.rgb(54,91,190):n==1?Color.rgb(218,50,48):n==2?Color.rgb(235,190,50):Color.rgb(226,226,205);rect(c,col,x+2,y,x+12,y+8);}
-                  rect(c,Color.rgb(22,91,44),0,190,720,230); text(c,"16-BIT STADIUM",307,214,12,Color.WHITE);
-                  rect(c,G,0,230,720,960); for(int y=246;y<960;y+=34)rect(c,G2,0,y,720,y+14);
-                  q.setColor(Color.WHITE);q.setStyle(Paint.Style.STROKE);q.setStrokeWidth(4);Path l=new Path();l.moveTo(340,850);l.lineTo(0,270);Path r=new Path();r.moveTo(380,850);r.lineTo(720,270);c.drawPath(l,q);c.drawPath(r,q);q.setStyle(Paint.Style.FILL);
-                  Path d=new Path();d.moveTo(360,840);d.lineTo(255,550);d.lineTo(360,370);d.lineTo(465,550);d.close();q.setColor(D);c.drawPath(d,q);base(c,360,840);base(c,255,550);base(c,360,370);base(c,465,550);
-                  q.setColor(D);c.drawOval(310,405,410,445,q);rect(c,Color.WHITE,344,419,376,426);
+                  rect(c,G,0,0,720,960);rect(c,N,0,0,720,66);stroke(c,Color.WHITE,6,6,714,60,2);
+                  text(c,op+" "+opScore,16,29,14,Color.WHITE);text(c,me+" "+meScore,704-p.measureText(me+" "+meScore),29,14,Color.WHITE);text(c,inning+"회 "+(batting?"초":"말"),329,28,14,Y);text(c,"B 0   S "+strikes+"   O "+outs,304,50,12,Color.WHITE);
+                  rect(c,Color.rgb(27,65,48),0,76,720,190);for(int y=84;y<180;y+=18)for(int x=0;x<720;x+=18){int n=(x/18+y/18)%4;int col=n==0?Color.rgb(54,91,190):n==1?Color.rgb(218,50,48):n==2?Color.rgb(235,190,50):Color.rgb(226,226,205);rect(c,col,x+2,y,x+12,y+8);}rect(c,Color.rgb(22,91,44),0,190,720,230);text(c,batting?"BATTER VIEW":"PITCHER VIEW",302,214,12,Y);
+                  rect(c,G,0,230,720,960);for(int y=246;y<960;y+=34)rect(c,G2,0,y,720,y+14);
+                  q.setColor(Color.WHITE);q.setStyle(Paint.Style.STROKE);q.setStrokeWidth(4);Path l=new Path(),r=new Path();l.moveTo(320,845);l.lineTo(0,275);r.moveTo(400,845);r.lineTo(720,275);c.drawPath(l,q);c.drawPath(r,q);q.setStyle(Paint.Style.FILL);
+                  Path d=new Path();if(batting){d.moveTo(360,820);d.lineTo(275,555);d.lineTo(360,365);d.lineTo(445,555);}else{d.moveTo(360,365);d.lineTo(445,555);d.lineTo(360,820);d.lineTo(275,555);}d.close();q.setColor(D);c.drawPath(d,q);
+                  base(c,360,batting?820:365);base(c,275,555);base(c,360,batting?365:820);base(c,445,555);
+                  q.setColor(D);c.drawOval(315,batting?390:795,405,batting?430:835,q);rect(c,Color.WHITE,345,batting?405:808,375,batting?412:815);
               }
-          
               private void players(Canvas c){
-                  float b=(float)Math.sin((System.currentTimeMillis()%900)/900.0*Math.PI*2)*2;
-                  player(c,360,398+b,Color.rgb(32,72,185),1.12f,false,0);
-                  player(c,245,520-b,Color.rgb(32,72,185),.9f,false,0); player(c,475,520+b,Color.rgb(32,72,185),.9f,false,0);
-                  player(c,300,470+b,Color.rgb(32,72,185),.88f,false,0); player(c,420,470-b,Color.rgb(32,72,185),.88f,false,0);
-                  player(c,190,300,Color.rgb(32,72,185),.85f,false,0); player(c,360,285,Color.rgb(32,72,185),.85f,false,0); player(c,530,300,Color.rgb(32,72,185),.85f,false,0);
-                  if(batting){player(c,360,720,Color.rgb(220,66,40),1.48f,true,swingT);player(c,360,790,Color.rgb(25,55,145),.98f,false,0);}
-                  else {player(c,360,398,Color.rgb(220,66,40),1.28f,false,phase==1?t:0);player(c,360,720,Color.rgb(220,66,40),1.15f,true,0);}
+                  // ONLY pitcher and batter. No extra fielders/catcher.
+                  if(batting){player(c,360,395,BLUE,1.25f,false,phase==1?t:0,false);player(c,360,710,RED,1.55f,true,swingT,true);}
+                  else {player(c,360,385,RED,1.32f,false,0,false);player(c,360,765,BLUE,1.50f,false,phase==1?t:0,true);}
               }
-          
               private void windup(Canvas c){
-                  rect(c,Color.argb(210,0,0,0),120,245,600,330); stroke(c,Y,120,245,600,330,3); text(c,"WIND UP",305,279,25,Y);
-                  rect(c,Color.rgb(55,55,55),180,294,540,309); rect(c,Y,180,294,180+360*t,309); text(c,"투수가 공을 던집니다",278,323,12,Color.WHITE);
+                  rect(c,Color.argb(220,0,0,0),105,235,615,350);stroke(c,Y,105,235,615,350,3);String s=batting?"PITCHER WIND UP":"YOUR WIND UP";text(c,s,360-p.measureText(s)/2,273,23,Y);rect(c,Color.rgb(55,55,55),165,294,555,310);rect(c,Y,165,294,165+390*t,310);text(c,"투구 동작 진행 중",300,335,11,Color.WHITE);
               }
-          
               private void ball(Canvas c){
-                  float e=1-(float)Math.pow(1-t,1.65); float sx=360,sy=410,ex=360+(direction%3-1)*48,ey=710; float curve=pitchType==1?35:pitchType==2?-28:5;
-                  float x=sx+(ex-sx)*e+(float)Math.sin(e*Math.PI)*curve; float y=sy+(ey-sy)*e;
-                  q.setStyle(Paint.Style.STROKE);q.setStrokeWidth(3);q.setColor(Color.argb(120,255,255,255));Path path=new Path();path.moveTo(sx,sy);path.quadTo(360+curve,550,ex,ey);c.drawPath(path,q);q.setStyle(Paint.Style.FILL);
-                  for(int i=6;i>=1;i--){float tt=Math.max(0,t-i*.035f);float ee=1-(float)Math.pow(1-tt,1.65);float tx=sx+(ex-sx)*ee+(float)Math.sin(ee*Math.PI)*curve;float ty=sy+(ey-sy)*ee;q.setColor(Color.argb(18*(7-i),255,255,255));c.drawCircle(tx,ty,6,q);}
-                  float rr=7+13*e;q.setColor(Color.WHITE);c.drawCircle(x,y,rr,q);q.setColor(Color.argb(120,255,255,255));c.drawCircle(x-rr*.25f,y-rr*.25f,rr*.55f,q);
-                  q.setStyle(Paint.Style.STROKE);q.setStrokeWidth(3);q.setColor(Y);c.drawCircle(ex,ey,28,q);q.setStyle(Paint.Style.FILL); text(c,"TIMING",ex-25,ey+45,10,Y);
+                  float e=1-(float)Math.pow(1-t,1.65),sx=360,sy=batting?410:750,ex=360+(direction%3-1)*52,ey=batting?690:405,curve=pitchType==1?34:pitchType==2?-27:5;
+                  float x=sx+(ex-sx)*e+(float)Math.sin(e*Math.PI)*curve,y=sy+(ey-sy)*e;
+                  q.setStyle(Paint.Style.STROKE);q.setStrokeWidth(3);q.setColor(Color.argb(120,255,255,255));Path path=new Path();path.moveTo(sx,sy);path.quadTo(360+curve,(sy+ey)/2f,ex,ey);c.drawPath(path,q);q.setStyle(Paint.Style.FILL);
+                  for(int i=8;i>=1;i--){float tt=Math.max(0,t-i*.025f),ee=1-(float)Math.pow(1-tt,1.65),tx=sx+(ex-sx)*ee+(float)Math.sin(ee*Math.PI)*curve,ty=sy+(ey-sy)*ee;q.setColor(Color.argb(18*(9-i),255,255,255));c.drawCircle(tx,ty,5+5*ee,q);}
+                  float rr=7+14*e;q.setColor(Color.WHITE);c.drawCircle(x,y,rr,q);q.setColor(Color.argb(130,255,255,255));c.drawCircle(x-rr*.25f,y-rr*.25f,rr*.55f,q);
+                  q.setStyle(Paint.Style.STROKE);q.setStrokeWidth(3);q.setColor(Y);c.drawCircle(ex,ey,29,q);q.setStyle(Paint.Style.FILL);text(c,"TIMING",ex-25,ey+45,10,Y);
               }
-          
-              private void batSwing(Canvas c){float a=-80+swingT*155; q.setStyle(Paint.Style.STROKE);q.setStrokeWidth(13);q.setColor(Color.rgb(195,137,58));c.drawArc(250,650,470,800,a,75,false,q);q.setStyle(Paint.Style.FILL);}
-          
-              private void hud(Canvas c){
-                  if(gameOver)return; float top=835; rect(c,Color.argb(235,3,8,13),10,top,710,950);stroke(c,Y,10,top,710,950,3);
-                  String role=batting?"YOUR TURN — BATTER":"YOUR TURN — PITCHER";text(c,role,360-p.measureText(role)/2,top+27,16,Y);text(c,msg,360-p.measureText(msg)/2,top+49,11,Color.WHITE);
+              private void swing(Canvas c){float a=-78+swingT*158;q.setStyle(Paint.Style.STROKE);q.setStrokeWidth(13);q.setColor(Color.rgb(195,137,58));c.drawArc(245,645,475,805,a,76,false,q);q.setStyle(Paint.Style.FILL);}
+              private void flash(Canvas c){rect(c,Color.argb((int)(115*hitFlash),255,244,130),0,0,720,960);text(c,"CRACK!",360-p.measureText("CRACK!")/2,500,34,Y);}
+              private void hud(Canvas c){if(gameOver)return;float top=830;rect(c,Color.argb(238,3,8,13),10,top,710,950);stroke(c,Y,10,top,710,950,3);String role=batting?"YOUR TURN — BATTER":"YOUR TURN — PITCHER";text(c,role,360-p.measureText(role)/2,top+27,16,Y);text(c,msg,360-p.measureText(msg)/2,top+49,11,Color.WHITE);
                   if(batting){button(c,245,top+66,475,top+119,"SWING",Y);text(c,"노란 TIMING 링에 공이 들어오는 순간",224,top+143,10,Color.WHITE);}
-                  else if(phase==4){text(c,"구종",18,top+75,10,Color.WHITE);button(c,18,top+91,100,top+125,"FAST",pitchType==0?Y:Color.WHITE);button(c,105,top+91,185,top+125,"CURVE",pitchType==1?Y:Color.WHITE);button(c,190,top+91,275,top+125,"SLIDER",pitchType==2?Y:Color.WHITE);text(c,"9-WAY",485,top+75,10,Color.WHITE);String[] a={"↖","↑","↗","←","●","→","↙","↓","↘"};float gx=475,gy=top+87,bs=22;for(int i=0;i<9;i++){int row=i/3,col=i%3;button(c,gx+col*25,gy+row*25,gx+col*25+bs,gy+row*25+bs,a[i],direction==i?Y:Color.WHITE);}button(c,590,top+91,695,top+125,"THROW",Y);}
-                  else {button(c,245,top+66,475,top+119,"PITCH",Y);text(c,"구종과 방향을 선택하세요",280,top+143,10,Color.WHITE);}
+                  else if(phase==4){text(c,"구종",18,top+75,10,Color.WHITE);button(c,18,top+91,100,top+125,"FAST",pitchType==0?Y:Color.WHITE);button(c,105,top+91,185,top+125,"CURVE",pitchType==1?Y:Color.WHITE);button(c,190,top+91,275,top+125,"SLIDER",pitchType==2?Y:Color.WHITE);text(c,"9-WAY",455,top+75,10,Color.WHITE);String[] a={"↖","↑","↗","←","●","→","↙","↓","↘"};float gx=450,gy=top+87,bs=22;for(int i=0;i<9;i++){int row=i/3,col=i%3;button(c,gx+col*26,gy+row*26,gx+col*26+bs,gy+row*26+bs,a[i],direction==i?Y:Color.WHITE);}button(c,585,top+91,695,top+125,"THROW",Y);}
+                  else {button(c,245,top+66,475,top+119,"PITCH",Y);text(c,"구종 → 9방향 → THROW",290,top+143,10,Color.WHITE);}
               }
-          
               private void over(Canvas c){rect(c,Color.argb(235,0,0,0),0,0,720,960);text(c,"GAME OVER",360-p.measureText("GAME OVER")/2,410,28,Y);String w=meScore==opScore?"DRAW GAME":(meScore>opScore?me+" WIN!":op+" WIN!");text(c,w,360-p.measureText(w)/2,455,22,Color.WHITE);text(c,op+" "+opScore+"  -  "+meScore+" "+me,255,490,15,Color.WHITE);button(c,260,535,460,595,"RESTART",Y);}
-          
-              private void cpuPitch(){if(!batting||gameOver||phase!=0)return;pitchType=rng.nextInt(3);direction=rng.nextInt(9);phase=1;t=0;msg="PITCHER WIND UP!";}
-              private void pitchStart(){if(batting||gameOver||phase!=4)return;phase=1;t=0;msg="WIND UP!";}
-              private void swingHit(){if(!batting||phase!=2)return;swingT=.01f;if(t>=.56&&t<=.88){int n=rng.nextInt(100);if(n<12){meScore+=4;result="HOME RUN!";}else if(n<34){meScore+=2;result="DOUBLE!";}else if(n<72){meScore++;result="BASE HIT!";}else{outs++;result="OUT!";}}else{strikes++;result=t<.56?"TOO EARLY!":"TOO LATE!";}msg=result;phase=3;resultT=.75f;}
+              private void cpuPitch(){if(!batting||phase!=0||gameOver)return;pitchType=rng.nextInt(3);direction=rng.nextInt(9);phase=1;t=0;msg="PITCHER WIND UP!";}
+              private void pitchStart(){if(batting||phase!=4||gameOver)return;phase=1;t=0;msg="YOUR WIND UP!";}
+              private void swingHit(){if(!batting||phase!=2)return;swingT=.01f;if(t>=.56&&t<=.88){int n=rng.nextInt(100);if(n<12){meScore+=4;result="HOME RUN!";}else if(n<34){meScore+=2;result="DOUBLE!";}else if(n<72){meScore++;result="BASE HIT!";}else{outs++;result="OUT!";}hitFlash=1;vibrateHit();}else{strikes++;result=t<.56?"TOO EARLY!":"TOO LATE!";}msg=result;phase=3;resultT=.75f;}
               private void cpuResult(){int n=rng.nextInt(100);if(n<12){opScore+=4;result="CPU HOME RUN!";}else if(n<40){opScore++;result="CPU HIT!";}else{outs++;result="CPU OUT!";}msg=result;phase=3;resultT=.75f;}
-              private void advance(){if(strikes>=3){strikes=0;outs++;msg="STRIKEOUT!";}if(outs>=3){outs=0;strikes=0;batting=!batting;if(batting)inning++;msg=batting?me+" AT BAT":op+" AT BAT";if(inning>9&&meScore!=opScore)gameOver=true;if(inning>12)gameOver=true;}else{phase=0;msg=batting?"READY FOR PITCH":"SELECT PITCH";}}
-          
-              @Override public boolean onTouchEvent(MotionEvent e){if(e.getAction()!=MotionEvent.ACTION_UP)return true;float x=e.getX()-OX,y=e.getY()-OY;if(x<0||y<0||x>VW||y>VH)return true;x/=S;y/=S;
-                  if(gameOver){if(x>250&&x<470&&y>520&&y<620)((MainActivity)getContext()).restart();return true;}
-                  if(batting){if(phase==0&&y>835&&y<950)cpuPitch();else if(phase==2&&y>835&&y<950)swingHit();}
-                  else {if(phase==0&&y>835&&y<950){phase=4;msg="SELECT PITCH";}else if(phase==4){if(y>926&&y<960){if(x<100)pitchType=0;else if(x<185)pitchType=1;else if(x<275)pitchType=2;else if(x>585)pitchStart();msg=pitchType==0?"FASTBALL":pitchType==1?"CURVE":"SLIDER";}float gx=475,gy=922,bs=22;for(int i=0;i<9;i++){int row=i/3,col=i%3;float l=gx+col*25,tg=gy+row*25;if(x>=l&&x<=l+bs&&y>=tg&&y<=tg+bs){direction=i;msg="AIM "+(i+1);return true;}}}}
+              private void advance(){if(strikes>=3){strikes=0;outs++;msg="STRIKEOUT!";}if(outs>=3){outs=0;strikes=0;batting=!batting;if(batting)inning++;phase=0;msg=batting?me+" AT BAT":op+" AT BAT";if(inning>9&&meScore!=opScore)gameOver=true;if(inning>12)gameOver=true;}else{phase=0;msg=batting?"READY FOR PITCH":"SELECT PITCH";}}
+              private void vibrateHit(){try{if(vibrator==null||!vibrator.hasVibrator())return;if(Build.VERSION.SDK_INT>=26)vibrator.vibrate(VibrationEffect.createOneShot(60,VibrationEffect.DEFAULT_AMPLITUDE));else vibrator.vibrate(60);}catch(Exception ignored){}}
+              @Override public boolean onTouchEvent(MotionEvent e){if(e.getAction()!=MotionEvent.ACTION_UP)return true;float x=(e.getX()-OX)/S,y=(e.getY()-OY)/S;if(x<0||y<0||x>720||y>960)return true;
+                  if(gameOver){if(x>245&&x<475&&y>520&&y<620)((MainActivity)getContext()).restart();return true;}
+                  if(batting){if(phase==0&&y>830&&y<950)cpuPitch();else if(phase==2&&y>830&&y<950)swingHit();}
+                  else{if(phase==0&&y>830&&y<950){phase=4;msg="SELECT PITCH";}else if(phase==4){if(y>920&&y<960){if(x<100)pitchType=0;else if(x<185)pitchType=1;else if(x<275)pitchType=2;else if(x>575){pitchStart();return true;}msg=pitchType==0?"FASTBALL":pitchType==1?"CURVE":"SLIDER";}float gx=450,gy=913,bs=23;for(int i=0;i<9;i++){int row=i/3,col=i%3;float l=gx+col*26,tg=gy+row*26;if(x>=l&&x<=l+bs&&y>=tg&&y<=tg+bs){direction=i;msg="AIM "+(i+1);return true;}}}}
                   return true;}
-          
-              private void player(Canvas c,float x,float y,int shirt,float s,boolean bat,float motion){float bob=(float)Math.sin(motion*Math.PI*2)*3;q.setColor(Color.argb(75,0,0,0));c.drawOval(x-30*s,y+52*s,x+30*s,y+64*s,q);rect(c,Color.BLACK,x-23*s,y+25*s+bob,x-4*s,y+62*s+bob);rect(c,Color.BLACK,x+4*s,y+25*s-bob,x+23*s,y+62*s-bob);rect(c,shirt,x-30*s,y-3*s,x+30*s,y+39*s);rect(c,shirt,x-43*s,y+1*s,x-27*s,y+29*s);rect(c,shirt,x+27*s,y+1*s,x+43*s,y+29*s);q.setColor(Color.rgb(247,193,141));c.drawCircle(x,y-26*s,26*s,q);rect(c,Color.BLACK,x-30*s,y-51*s,x+30*s,y-38*s);rect(c,Color.BLACK,x-10*s,y-28*s,x-5*s,y-22*s);rect(c,Color.BLACK,x+5*s,y-28*s,x+10*s,y-22*s);rect(c,Color.BLACK,x-31*s,y+57*s,x-2*s,y+69*s);rect(c,Color.BLACK,x+2*s,y+57*s,x+31*s,y+69*s);if(bat){float a=motion>0?-75+motion*150:-55;q.setColor(Color.rgb(194,137,58));q.setStrokeWidth(9*s);q.setStyle(Paint.Style.STROKE);c.drawLine(x+25*s,y-3*s,x+25*s+(float)Math.cos(Math.toRadians(a))*90*s,y-3*s+(float)Math.sin(Math.toRadians(a))*90*s,q);q.setStyle(Paint.Style.FILL);}}
+              private void player(Canvas c,float x,float y,int jersey,float s,boolean bat,float motion,boolean back){float bob=(float)Math.sin(motion*Math.PI*2)*3;q.setColor(Color.argb(65,0,0,0));c.drawOval(x-30*s,y+53*s,x+30*s,y+65*s,q);
+                  // White baseball pants, belt, jersey, sleeves, socks, cleats.
+                  rect(c,Color.rgb(240,240,232),x-25*s,y+28*s+bob,x-4*s,y+61*s+bob);rect(c,Color.rgb(240,240,232),x+4*s,y+28*s-bob,x+25*s,y+61*s-bob);rect(c,Color.rgb(28,30,34),x-29*s,y+25*s,x+29*s,y+32*s);
+                  rect(c,jersey,x-31*s,y-5*s,x+31*s,y+39*s);rect(c,Color.WHITE,x-7*s,y-4*s,x+7*s,y+38*s);rect(c,jersey,x-45*s,y-1*s,x-27*s,y+24*s);rect(c,jersey,x+27*s,y-1*s,x+45*s,y+24*s);
+                  q.setColor(Color.rgb(246,191,139));c.drawCircle(x-39*s,y+27*s,7*s,q);c.drawCircle(x+39*s,y+27*s,7*s,q);c.drawCircle(x,y-28*s,26*s,q);
+                  rect(c,jersey,x-30*s,y-54*s,x+30*s,y-40*s);rect(c,jersey,x-37*s,y-48*s,x+4*s,y-41*s);
+                  if(back){text(c,"27",x-12*s,y+21*s,21*s,Color.WHITE);text(c,"SOX",x-13*s,y+36*s,7*s,Color.WHITE);}else{rect(c,Color.BLACK,x-10*s,y-30*s,x-5*s,y-24*s);rect(c,Color.BLACK,x+5*s,y-30*s,x+10*s,y-24*s);text(c,"27",x-11*s,y+25*s,18*s,Color.WHITE);}
+                  rect(c,jersey,x-27*s,y+57*s,x-4*s,y+69*s);rect(c,jersey,x+4*s,y+57*s,x+27*s,y+69*s);rect(c,Color.BLACK,x-31*s,y+65*s,x-1*s,y+73*s);rect(c,Color.BLACK,x+1*s,y+65*s,x+31*s,y+73*s);
+                  if(bat){float a=motion>0?-78+motion*158:-55;q.setColor(Color.rgb(194,137,58));q.setStrokeWidth(9*s);q.setStyle(Paint.Style.STROKE);c.drawLine(x+25*s,y-3*s,x+25*s+(float)Math.cos(Math.toRadians(a))*92*s,y-3*s+(float)Math.sin(Math.toRadians(a))*92*s,q);q.setStyle(Paint.Style.FILL);}}
               private void base(Canvas c,float x,float y){Path b=new Path();b.moveTo(x,y-9);b.lineTo(x+9,y);b.lineTo(x,y+9);b.lineTo(x-9,y);b.close();q.setColor(Color.WHITE);c.drawPath(b,q);}
               private void rect(Canvas c,int col,float l,float t,float r,float b){q.setColor(col);c.drawRect(l,t,r,b,q);}private void stroke(Canvas c,int col,float l,float t,float r,float b,float sw){q.setColor(col);q.setStyle(Paint.Style.STROKE);q.setStrokeWidth(sw);c.drawRect(l,t,r,b,q);q.setStyle(Paint.Style.FILL);}private void text(Canvas c,String s,float x,float y,float size,int col){p.setTypeface(Typeface.create(Typeface.MONOSPACE,Typeface.BOLD));p.setTextSize(size);p.setColor(col);c.drawText(s,x,y,p);}private void button(Canvas c,float l,float t,float r,float b,String s,int col){rect(c,Color.rgb(8,12,18),l,t,r,b);stroke(c,col,l,t,r,b,3);p.setTextSize(14);text(c,s,(l+r-p.measureText(s))/2,(t+b)/2+5,14,col);}
           }
@@ -184,5 +176,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: RetroBaseball-v6-debug
+          name: RetroBaseball-v7-debug
           path: app/build/outputs/apk/debug/app-debug.apk
