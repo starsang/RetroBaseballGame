@@ -1,0 +1,347 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create Android project
+        shell: bash
+        run: |
+          mkdir -p "$(dirname 'build.gradle')"
+          cat > 'build.gradle' <<'EOF_FILE'
+plugins {
+    id 'com.android.application' version '8.8.2' apply false
+}
+          EOF_FILE
+          mkdir -p "$(dirname 'settings.gradle')"
+          cat > 'settings.gradle' <<'EOF_FILE'
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = "RetroBaseballGame"
+include(":app")
+          EOF_FILE
+          mkdir -p "$(dirname 'gradle.properties')"
+          cat > 'gradle.properties' <<'EOF_FILE'
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+          EOF_FILE
+          mkdir -p "$(dirname 'README.md')"
+          cat > 'README.md' <<'EOF_FILE'
+# 레트로 야구 Android 게임
+
+레트로 픽셀 야구 게임 프로토타입입니다.
+
+## 현재 구현
+- 가로 화면 고정
+- 1~9회 경기 흐름
+- 투수: 직구 / 커브 / 슬라이더
+- 타자: 타이밍 스윙
+- 볼 / 스트라이크 / 아웃
+- 안타 / 홈런 / 헛스윙 / 파울 / 볼넷
+- 픽셀풍 경기장과 선수
+- Android 7.0(API 24) 이상
+
+## APK 빌드
+Android Studio에서 프로젝트를 열어 `app`을 실행하거나,
+GitHub에 업로드 후 Actions의 `Build APK`를 실행하면
+`app-debug.apk`가 artifact로 생성됩니다.
+
+현재 제작 환경에는 Android SDK/Build Tools가 설치되어 있지 않아
+이 환경에서 APK 바이너리 자체까지 컴파일할 수는 없습니다.
+          EOF_FILE
+          mkdir -p "$(dirname 'app/build.gradle')"
+          cat > 'app/build.gradle' <<'EOF_FILE'
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.example.retrobaseball'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.example.retrobaseball'
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+          EOF_FILE
+          mkdir -p "$(dirname 'app/proguard-rules.pro')"
+          cat > 'app/proguard-rules.pro' <<'EOF_FILE'
+# Keep default rules for this prototype.
+          EOF_FILE
+          mkdir -p "$(dirname 'app/src/main/AndroidManifest.xml')"
+          cat > 'app/src/main/AndroidManifest.xml' <<'EOF_FILE'
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:theme="@style/AppTheme"
+        android:label="레트로 야구"
+        android:allowBackup="false"
+        android:supportsRtl="true">
+        <activity
+            android:name=".MainActivity"
+            android:screenOrientation="landscape"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+          EOF_FILE
+          mkdir -p "$(dirname 'app/src/main/java/com/example/retrobaseball/BaseballView.java')"
+          cat > 'app/src/main/java/com/example/retrobaseball/BaseballView.java' <<'EOF_FILE'
+package com.example.retrobaseball;
+
+import android.content.Context;
+import android.graphics.*;
+import android.view.MotionEvent;
+import android.view.View;
+import java.util.Random;
+
+public class BaseballView extends View {
+    Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+    Paint pixel = new Paint();
+    Random rng = new Random();
+    int inning=1, outs=0, balls=0, strikes=0, score=0, cpu=0;
+    boolean pitching=false, ballFlying=false, resultShown=false;
+    float bx, by, ballT=0f;
+    int pitchType=0;
+    String result="TAP PITCH TO THROW";
+    long last=0;
+
+    int W,H;
+    int green=Color.rgb(52,160,67), dirt=Color.rgb(167,91,39), dark=Color.rgb(12,14,15);
+    int white=Color.WHITE, yellow=Color.rgb(255,224,88);
+
+    public BaseballView(Context c){ super(c); setFocusable(true); }
+
+    void rect(Canvas c,int color,float l,float t,float r,float b){
+        pixel.setColor(color); c.drawRect(l,t,r,b,pixel);
+    }
+    void txt(Canvas c,String s,float x,float y,float size,int color){
+        p.setTypeface(Typeface.create(Typeface.MONOSPACE,Typeface.BOLD));
+        p.setTextSize(size); p.setColor(color); c.drawText(s,x,y,p);
+    }
+
+    @Override protected void onDraw(Canvas c){
+        W=getWidth(); H=getHeight();
+        c.drawColor(Color.BLACK);
+
+        // retro scoreboard
+        rect(c,Color.rgb(20,20,20),0,0,W,100);
+        txt(c,"RETRO BASEBALL",22,36,24,white);
+        txt(c,String.format("INNING %d",inning),W/2-65,34,20,yellow);
+        txt(c,"YOU "+score+"  -  "+cpu+" CPU",W-245,36,19,white);
+        txt(c,"B "+balls+"  S "+strikes+"  O "+outs,22,72,18,white);
+
+        // stadium
+        rect(c,Color.rgb(40,120,45),0,100,W,H);
+        rect(c,Color.rgb(89,173,75),0,145,W,175);
+        rect(c,dirt,0,175,W,250);
+        rect(c,green,0,250,W,H);
+
+        // distant seats
+        for(int x=0;x<W;x+=18){
+            rect(c,(x/18%2==0)?Color.rgb(45,70,160):Color.rgb(205,45,45),x,112,x+10,128);
+        }
+
+        // infield
+        float cx=W/2f, cy=H*0.60f;
+        p.setColor(dirt); c.drawCircle(cx,cy,125,p);
+        p.setColor(Color.rgb(70,150,62)); c.drawCircle(cx,cy,100,p);
+        drawBase(c,cx,cy+100); drawBase(c,cx-115,cy); drawBase(c,cx+115,cy);
+        drawBase(c,cx,cy-100);
+
+        // pitcher
+        drawPlayer(c,cx,cy-35,Color.rgb(45,85,185),false);
+        // batter
+        drawPlayer(c,cx, H-165,Color.rgb(224,82,42),true);
+
+        // ball
+        if(ballFlying){
+            bx = cx + (float)Math.sin(ballT*3.0)*18;
+            by = cy+20 + ballT*(H-230-cy);
+            p.setColor(Color.WHITE); c.drawCircle(bx,by,7,p);
+        }
+
+        // bottom panel
+        rect(c,Color.BLACK,18,H-82,W-18,H-12);
+        txt(c,pitching ? "SELECT PITCH" : "BATTER READY",34,H-51,19,yellow);
+        txt(c,result,34,H-26,16,white);
+
+        if(!pitching){
+            button(c, W-245,H-70, W-140,H-25,"PITCH");
+            button(c, W-125,H-70, W-25,H-25,"SWING");
+        } else {
+            button(c, W-355,H-70,W-255,H-25,"FAST");
+            button(c, W-245,H-70,W-145,H-25,"CURVE");
+            button(c, W-135,H-70,W-25,H-25,"SLIDER");
+        }
+        invalidate();
+    }
+
+    void drawBase(Canvas c,float x,float y){
+        p.setColor(white); Path path=new Path();
+        path.moveTo(x,y-9); path.lineTo(x+9,y); path.lineTo(x,y+9); path.lineTo(x-9,y); path.close();
+        c.drawPath(path,p);
+    }
+
+    void drawPlayer(Canvas c,float x,float y,int shirt,boolean bat){
+        rect(c,Color.BLACK,x-18,y-4,x+18,y+30);
+        rect(c,shirt,x-15,y+2,x+15,y+29);
+        p.setColor(Color.rgb(245,190,140)); c.drawCircle(x,y,14,p);
+        rect(c,Color.BLACK,x-15,y-15,x+15,y-7);
+        rect(c,Color.BLACK,x-22,y+27,x-5,y+39);
+        rect(c,Color.BLACK,x+5,y+27,x+22,y+39);
+        if(bat){
+            rect(c,Color.rgb(190,135,65),x+13,y+10,x+65,y+16);
+            rect(c,Color.rgb(120,75,35),x+8,y+8,x+20,y+18);
+        }
+    }
+
+    void button(Canvas c,float l,float t,float r,float b,String s){
+        rect(c,Color.rgb(28,28,28),l,t,r,b);
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(3); p.setColor(white); c.drawRect(l,t,r,b,p); p.setStyle(Paint.Style.FILL);
+        txt(c,s,l+12,t+30,15,white);
+    }
+
+    void startPitch(int type){
+        pitchType=type; pitching=false; ballFlying=true; ballT=0f; resultShown=false; result="BALL IN PLAY!";
+        last=System.currentTimeMillis();
+    }
+
+    void swing(){
+        if(!ballFlying) return;
+        float timing=Math.abs(ballT-0.72f);
+        ballFlying=false;
+        if(timing<0.08){
+            int roll=rng.nextInt(100);
+            if(roll<22){ score++; result="HOME RUN!"; }
+            else if(roll<68){ result="HIT!  SINGLE"; }
+            else { result="OUT!"; outs++; }
+        } else if(timing<0.17){
+            if(rng.nextBoolean()){ result="FOUL BALL"; strikes=Math.min(2,strikes+1); }
+            else { result="OUT!"; outs++; }
+        } else {
+            strikes++; result="SWING & MISS";
+        }
+        advance();
+    }
+
+    void advance(){
+        if(strikes>=3 || outs>=3){
+            if(outs>=3){
+                inning++; outs=0; balls=0; strikes=0;
+                if(inning>9){ inning=1; score=0; cpu=0; result="NEW GAME"; }
+                else result="CHANGE SIDES";
+            }
+        }
+        if(balls>=4){ score++; balls=0; strikes=0; result="WALK!"; }
+    }
+
+    @Override public boolean onTouchEvent(MotionEvent e){
+        if(e.getAction()!=MotionEvent.ACTION_UP) return true;
+        float x=e.getX(), y=e.getY();
+        if(y<H-90) return true;
+
+        if(!pitching){
+            if(x>W-255 && x<W-135){ pitching=true; result="CHOOSE A PITCH"; }
+            else if(x>W-140){ swing(); }
+        } else {
+            if(x>W-370 && x<W-255) startPitch(0);
+            else if(x>W-255 && x<W-145) startPitch(1);
+            else if(x>W-145) startPitch(2);
+        }
+        return true;
+    }
+
+    @Override protected void onSizeChanged(int w,int h,int ow,int oh){ W=w; H=h; }
+}
+          EOF_FILE
+          mkdir -p "$(dirname 'app/src/main/java/com/example/retrobaseball/MainActivity.java')"
+          cat > 'app/src/main/java/com/example/retrobaseball/MainActivity.java' <<'EOF_FILE'
+package com.example.retrobaseball;
+
+import android.app.Activity;
+import android.os.Bundle;
+import android.view.Window;
+import android.view.WindowManager;
+
+public class MainActivity extends Activity {
+    @Override public void onCreate(Bundle b) {
+        super.onCreate(b);
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        setContentView(new BaseballView(this));
+    }
+}
+          EOF_FILE
+          mkdir -p "$(dirname 'app/src/main/res/values/styles.xml')"
+          cat > 'app/src/main/res/values/styles.xml' <<'EOF_FILE'
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:colorAccent">#FFFFFF</item>
+        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:statusBarColor">#000000</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
+          EOF_FILE
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build debug APK
+        run: gradle assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RetroBaseball-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
