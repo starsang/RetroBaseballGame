@@ -23,8 +23,8 @@ jobs:
                   applicationId 'com.example.retrobaseball'
                   minSdk 24
                   targetSdk 35
-                  versionCode 11
-                  versionName '11.0'
+                  versionCode 12
+                  versionName '12.0'
               }
               buildTypes {
                   release {
@@ -225,16 +225,17 @@ jobs:
                       rect(c,Color.argb(32,0,80,20),x,y,x+18,y+4);
               }
           
+              // v12: player sprites intentionally kept compact so the field remains dominant.
               void drawPlayers(Canvas c){
                   if(batting){
                       // Detailed pitcher front at 12 o'clock, batter back at bottom.
-                      drawSprite(c, pitcherFront(), 450, 500, 0.78f);
-                      drawSprite(c, batterBack(), 450, 910, 0.82f);
+                      drawSprite(c, pitcherFront(), 450, 500, 0.44f);
+                      drawSprite(c, batterBack(), 450, 910, 0.46f);
                   }else{
                       // Camera is reversed: detailed batter front at 12 o'clock,
                       // player-controlled pitcher is shown from behind at the bottom.
-                      drawSprite(c, batterFront, 450, 430, 0.82f);
-                      drawSprite(c, pitcherBack(), 450, 910, 0.82f);
+                      drawSprite(c, batterFront, 450, 430, 0.44f);
+                      drawSprite(c, pitcherBack(), 450, 910, 0.46f);
                   }
               }
           
@@ -605,5 +606,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: RetroBaseball-v11-debug
+          name: RetroBaseball-v12-debug
           path: app/build/outputs/apk/debug/app-debug.apk
